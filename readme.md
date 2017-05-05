@@ -7,46 +7,139 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/license.svg" alt="License"></a>
 </p>
 
-## About Laravel
+# 极验证 Composer Package
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel attempts to take the pain out of development by easing common tasks used in the majority of web projects, such as:
+## 视频教程: [Laravist](https://laravist.com/series/tools-that-are-dame-good-for-developer/episodes/1)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+>说明：由于geetest本身的composer package有很多不必要的文件，这里是最精简的版本，只用于验证码验证。
 
-Laravel is accessible, yet powerful, providing tools needed for large, robust applications. A superb combination of simplicity, elegance, and innovation give you tools you need to build any application with which you are tasked.
+## 演示
 
-## Learning Laravel
+![geetesst](https://cloud.githubusercontent.com/assets/6011686/12508320/385a56a6-c136-11e5-9353-b686c85bd37a.gif)
 
-Laravel has the most extensive and thorough documentation and video tutorial library of any modern web application framework. The [Laravel documentation](https://laravel.com/docs) is thorough, complete, and makes it a breeze to get started learning the framework.
+## Usage
 
-If you're not in the mood to read, [Laracasts](https://laracasts.com) contains over 900 video tutorials on a range of topics including Laravel, modern PHP, unit testing, JavaScript, and more. Boost the skill level of yourself and your entire team by digging into our comprehensive video library.
+安装 （目前的版本是 1.0）：
 
-## Laravel Sponsors
+```
+composer require laravist/geecaptcha
+```
 
-We would like to extend our thanks to the following sponsors for helping fund on-going Laravel development. If you are interested in becoming a sponsor, please visit the Laravel [Patreon page](http://patreon.com/taylorotwell):
+1. 实例化
+```php
+ $captcha = new \Laravist\GeeCaptcha\GeeCaptcha($captcha_id, $private_key);
+```
 
-- **[Vehikl](http://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[British Software Development](https://www.britishsoftware.co)**
-- **[Styde](https://styde.net)**
-- **[Codecourse](https://www.codecourse.com)**
-- [Fragrantica](https://www.fragrantica.com)
-- [SOFTonSOFA](https://softonsofa.com/)
+2. 使用的使用可以这样判断验证码是否验证成功（通常是post路由里）：
 
-## Contributing
+```php
+ if ($captcha->isFromGTServer() && $captcha->success()) 
+ {
+     // 登录的代码逻辑在这里   
+ }
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](http://laravel.com/docs/contributions).
+```
+> 注意: 上面第一个判断是检测GT(geetest.com)的服务器是否正常，第二个才是检测验证码是否正确。
 
-## Security Vulnerabilities
+3. 对于需要重新生成验证码的时候（通常放在get方式的路由里）：
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell at taylor@laravel.com. All security vulnerabilities will be promptly addressed.
+```php
+$captcha = new \Laravist\GeeCaptcha\GeeCaptcha($captcha_id, $private_key);
+echo $captcha->GTServerIsNormal();
+```
 
-## License
+## Laravel 使用用例
 
-The Laravel framework is open-sourced software licensed under the [MIT license](http://opensource.org/licenses/MIT).
+routes
+
+```php
+Route::group(['middleware' => ['web']], function () {
+    Route::get('/login', function () {
+        return view('login');
+    });
+
+    Route::post('/verify', function () {
+        $captcha = new \Laravist\GeeCaptcha\GeeCaptcha(env('CAPTCHA_ID'), env('PRIVATE_KEY'));
+        if ($captcha->isFromGTServer()) {
+            if($captcha->success()){
+                return 'success';
+            }
+            return 'no';
+        }
+        if ($captcha->hasAnswer()) {
+                return "answer";
+        }
+        return "no answer";
+    });
+
+    Route::get('/captcha', function () {
+        $captcha = new \Laravist\GeeCaptcha\GeeCaptcha(env('CAPTCHA_ID'), env('PRIVATE_KEY'));
+
+        echo $captcha->GTServerIsNormal();
+    });
+
+});
+```
+login视图:
+
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Laravel Geetest</title>
+        <script src="http://libs.baidu.com/jquery/1.9.0/jquery.js"></script>
+        <script src="http://api.geetest.com/get.php"></script>
+    </head>
+    <body>
+        <div class="container">
+            <div class="content" id="container">
+                <div class="title">Laravel 5</div>
+                <form method="post" action="/verify">
+                    {{ csrf_field() }}
+                    <div class="box">
+                        <label>邮箱：</label>
+                        <input type="text" name="email" value=""/>
+                    </div>
+                    <div class="box">
+                        <label>密码：</label>
+                        <input type="password" name="password" />
+                    </div>
+                    <div class="box" id="div_geetest_lib">
+                        <div id="captcha"></div>
+                        <script src="http://static.geetest.com/static/tools/gt.js"></script>
+                        <script>
+                            var handler = function (captchaObj) {
+                                // 将验证码加到id为captcha的元素里
+                                captchaObj.appendTo("#captcha");
+                            };
+                            $.ajax({
+                                // 获取id，challenge，success（是否启用failback）
+                                url: "captcha?rand="+Math.round(Math.random()*100),
+                                type: "get",
+                                dataType: "json", // 使用jsonp格式
+                                success: function (data) {
+                                    // 使用initGeetest接口
+                                    // 参数1：配置参数，与创建Geetest实例时接受的参数一致
+                                    // 参数2：回调，回调的第一个参数验证码对象，之后可以使用它做appendTo之类的事件
+                                    initGeetest({
+                                        gt: data.gt,
+                                        challenge: data.challenge,
+                                        product: "float", // 产品形式
+                                        offline: !data.success
+                                    }, handler);
+                                }
+                            });
+                        </script>
+                    </div>
+                    <div class="box">
+                        <button id="submit_button">提交</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </body>
+</html>
+
+```
+
+
